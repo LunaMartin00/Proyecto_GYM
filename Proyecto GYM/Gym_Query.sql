@@ -1286,3 +1286,115 @@ SELECT
 
 
 
+
+    --------------------------Seguridad de la base de datos------------------------------
+
+    ----------------------Creacion de logins---------------------------
+  USE [master]
+  GO
+  -- Login administrador del gimnasio
+  CREATE LOGIN [admin_gym] 
+  WITH PASSWORD = 'admin_gym123', 
+  CHECK_POLICY = ON,         
+  CHECK_EXPIRATION = OFF;  
+
+  -- Login de recepción (quien atiende socios, cobra, etc.)
+
+  CREATE LOGIN [recepcion_gym] 
+  WITH PASSWORD = 'recepcion_gym123',
+  CHECK_EXPIRATION = OFF, 
+  CHECK_POLICY = ON;
+
+  -- Login de entrenador (solo consulta info necesaria)
+  CREATE LOGIN [entrenador_gym] 
+  WITH PASSWORD = 'entrenador_gym123',
+  CHECK_EXPIRATION = OFF, 
+  CHECK_POLICY = ON;
+
+  ---------------------Creacion de usuarios------------------------------------
+  USE OLYMPUS_GYM
+  GO 
+
+    CREATE USER [admin_gym] FOR LOGIN [admin_gym];
+    CREATE USER [recepcion_gym] FOR LOGIN [recepcion_gym];
+    CREATE USER [entrenador_gym] FOR LOGIN [entrenador_gym];
+
+-----------------------Creacion de roles----------------------------------------
+USE OLYMPUS_GYM
+GO
+
+  CREATE ROLE rol_admin_gym;
+  CREATE ROLE rol_recepcion_gym;
+  CREATE ROLE rol_entrenador_gym;
+
+  -----Agregamos los usuarios a cada rol-------------------
+   
+ALTER ROLE rol_admin_gym       ADD MEMBER admin_gym;
+ALTER ROLE rol_recepcion_gym   ADD MEMBER recepcion_gym;
+ALTER ROLE rol_entrenador_gym  ADD MEMBER entrenador_gym;
+
+
+----------Asignacion de permisos a cada rol----------------------------------------------------
+
+-- El rol admin_gym puede hacer de todo en la BD sera nuestro dba
+GRANT CONTROL ON DATABASE::OLYMPUS_GYM TO rol_admin_gym; 
+
+---Permisos para rol recepcion-------------
+
+-- Socios: ver, crear, actualizar
+GRANT SELECT, INSERT, UPDATE ON dbo.Socios TO rol_recepcion_gym;
+
+-- Pagos: ver y registrar pagos
+GRANT SELECT, INSERT ON dbo.Pagos TO rol_recepcion_gym;
+
+-- Reservas: ver, actualizar registrar reservas 
+GRANT SELECT, INSERT, UPDATE ON dbo.Reservas TO rol_recepcion_gym;
+
+-- Catálogos: solo lectura
+GRANT SELECT ON dbo.Tipo_Membresia      TO rol_recepcion_gym;
+GRANT SELECT ON dbo.Actividades         TO rol_recepcion_gym;
+GRANT SELECT ON dbo.Clases_Programadas  TO rol_recepcion_gym;
+
+---Denegando permisos para borrar--
+DENY DELETE ON dbo.Socios   TO rol_recepcion_gym;
+DENY DELETE ON dbo.Pagos    TO rol_recepcion_gym;
+DENY DELETE ON dbo.Reservas TO rol_recepcion_gym;
+
+
+-----Delegando permisos para rol entrenador----------------------
+
+-- Solo lectura (Para que el entrenador se guie) solo puede leer ---
+GRANT SELECT ON dbo.Socios             TO rol_entrenador_gym;
+GRANT SELECT ON dbo.Actividades        TO rol_entrenador_gym;
+GRANT SELECT ON dbo.Clases_Programadas TO rol_entrenador_gym;
+GRANT SELECT ON dbo.Reservas           TO rol_entrenador_gym;
+
+
+
+
+------Comprobacion que quedo bien-----------------
+-- Ver usuarios de la base
+SELECT name AS Usuario, type_desc
+FROM sys.database_principals
+WHERE type IN ('S','U','G')
+  AND name NOT LIKE 'dbo' AND name NOT LIKE 'guest';
+
+-- Ver roles definidos por el usuario
+SELECT name AS Rol
+FROM sys.database_principals
+WHERE type = 'R';
+
+-- Ver miembros de cada rol
+SELECT 
+    r.name AS Rol,
+    m.name AS Miembro
+FROM sys.database_role_members drm
+JOIN sys.database_principals r ON drm.role_principal_id = r.principal_id
+JOIN sys.database_principals m ON drm.member_principal_id = m.principal_id
+ORDER BY r.name, m.name;
+
+
+
+
+
+
