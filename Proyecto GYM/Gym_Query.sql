@@ -1394,7 +1394,27 @@ JOIN sys.database_principals m ON drm.member_principal_id = m.principal_id
 ORDER BY r.name, m.name;
 
 
+----------------------------------Creacion de indices----------------------------------------------------------
+----Los indices se crearon en consultas donde se cree que se manejaran mas datos o en tablas grandes
+-- Búsquedas frecuentes por apellido y nombre
+CREATE NONCLUSTERED INDEX IX_Socios_Apellido_Nombre
+ON dbo.Socios (apellido, nombre);
+
+-- Pagos por socio y fecha
+CREATE NONCLUSTERED INDEX IX_Pagos_IdSocio_Fecha
+ON dbo.Pagos (id_socio, fecha_pago);
+
+-- Pagos por tipo de membresía y fecha (para ingresos por plan)
+CREATE NONCLUSTERED INDEX IX_Pagos_TipoMembresia_Fecha
+ON dbo.Pagos (tipo_membresia_id, fecha_pago);
 
 
+-- Reservas por socio y fecha
+CREATE NONCLUSTERED INDEX IX_Reservas_IdSocio_Fecha
+ON dbo.Reservas (id_socio, fecha_reserva);
 
+
+-- Clases programadas por actividad y fecha/hora
+CREATE NONCLUSTERED INDEX IX_ClasesProg_Actividad_Fecha
+ON dbo.Clases_Programadas (actividad_id, fecha_hora_inicio);
 
