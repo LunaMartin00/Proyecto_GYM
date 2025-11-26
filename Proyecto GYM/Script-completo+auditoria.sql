@@ -1450,6 +1450,119 @@ JOIN sys.schemas s ON t.schema_id = s.schema_id
 ORDER BY s.name, t.name;
 
 
+-----------Consultas avanzadas---------------------------------------------
+----Consulta 1: Clases mas vacias
+USE OLYMPUS_GYM;
+GO
+
+
+WITH Ocupacion AS (
+    SELECT
+        c.clase_id,
+        a.nombre_clase,
+        c.cupo_maximo,
+        COUNT(r.reserva_id) AS Reservas
+    FROM operacion.Clases_Programadas c
+    LEFT JOIN operacion.Reservas r 
+        ON c.clase_id = r.clase_id
+    JOIN catalogo.Actividades a 
+        ON c.actividad_id = a.actividad_id
+    GROUP BY c.clase_id, a.nombre_clase, c.cupo_maximo
+)
+SELECT TOP (20)
+    clase_id,
+    nombre_clase,
+    cupo_maximo,
+    Reservas,
+    CAST(Reservas * 100.0 / NULLIF(cupo_maximo,0) AS DECIMAL(5,2)) AS PorcentajeOcupacion,
+    RANK() OVER (
+        ORDER BY CAST(Reservas * 100.0 / NULLIF(cupo_maximo,0) AS DECIMAL(5,2)) ASC
+    ) AS RankingClasesMasVacias
+FROM Ocupacion
+ORDER BY PorcentajeOcupacion ASC, Reservas ASC;
+
+
+
+
+--Consulta 2: Ingresos mensuales y acumulados en el tiempo
+USE OLYMPUS_GYM;
+GO
+
+WITH IngresosMensuales AS (
+    SELECT 
+        YEAR(fecha_pago) AS Anio,
+        MONTH(fecha_pago) AS Mes,
+        SUM(monto_pagado) AS IngresoMes
+    FROM operacion.Pagos
+    GROUP BY YEAR(fecha_pago), MONTH(fecha_pago)
+)
+SELECT 
+    Anio,
+    Mes,
+    IngresoMes,
+    SUM(IngresoMes) OVER (
+        ORDER BY Anio, Mes
+        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+    ) AS IngresoAcumulado
+FROM IngresosMensuales
+ORDER BY Anio, Mes;
+
+--Consulta 3: Ocupación y ranking de las clases (porcentaje)
+USE OLYMPUS_GYM;
+GO
+
+WITH Ocupacion AS (
+    SELECT
+        c.clase_id,
+        a.nombre_clase,
+        c.cupo_maximo,
+        COUNT(r.reserva_id) AS Reservas
+    FROM operacion.Clases_Programadas c
+    LEFT JOIN operacion.Reservas r 
+        ON c.clase_id = r.clase_id
+    JOIN catalogo.Actividades a 
+        ON c.actividad_id = a.actividad_id
+    GROUP BY c.clase_id, a.nombre_clase, c.cupo_maximo
+)
+SELECT TOP (20)
+    clase_id,
+    nombre_clase,
+    cupo_maximo,
+    Reservas,
+    CAST(Reservas * 100.0 / NULLIF(cupo_maximo,0) AS DECIMAL(5,2)) AS PorcentajeOcupacion,
+    ROW_NUMBER() OVER (ORDER BY Reservas DESC) AS RankingPorReservas
+FROM Ocupacion
+ORDER BY Reservas DESC;
+
+--Consulta 4 : Entrenadores más demandados
+
+USE OLYMPUS_GYM;
+GO
+
+WITH ReservasPorEntrenador AS (
+    SELECT
+        e.id_entrenador,
+        e.nombre,
+        e.apellido,
+        COUNT(r.reserva_id) AS TotalReservas
+    FROM catalogo.Entrenadores e
+    JOIN operacion.Clases_Programadas c 
+        ON e.id_entrenador = c.id_entrenador
+    LEFT JOIN operacion.Reservas r 
+        ON c.clase_id = r.clase_id
+    GROUP BY e.id_entrenador, e.nombre, e.apellido
+)
+SELECT
+    id_entrenador,
+    nombre,
+    apellido,
+    TotalReservas,
+    RANK() OVER (ORDER BY TotalReservas DESC) AS RankingPopularidad
+FROM ReservasPorEntrenador
+ORDER BY TotalReservas DESC;
+
+
+
 
 --AUDITORÍA Y DIMENSIONAMIENTO
 
