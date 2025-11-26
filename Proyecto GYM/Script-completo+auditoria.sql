@@ -1600,17 +1600,31 @@ GO
 USE [OLYMPUS_GYM];
 GO
 
+USE OLYMPUS_GYM;
+GO
+SELECT * 
+FROM sys.tables 
+WHERE name = 'Pagos';
+
 -- Crear la especificación de lo que vamos a vigilar (Reglas de gym)
 IF NOT EXISTS (SELECT * FROM sys.database_audit_specifications WHERE name = 'Audit_OlympusGym_DatosSensibles')
 BEGIN
     CREATE DATABASE AUDIT SPECIFICATION [Audit_OlympusGym_DatosSensibles]
     FOR SERVER AUDIT [Audit_OlympusGym_Server]
-    ADD (INSERT, UPDATE, DELETE ON dbo.Pagos BY [public]),  -- Alerta de Fraude: Modificación de dinero
-    ADD (DELETE ON dbo.Socios BY [public]),                  -- Alerta de Seguridad: Borrado de clientes
-    ADD (SELECT ON dbo.Socios BY [recepcion_gym])            -- Alerta de Privacidad: Recepción viendo datos personales
+
+    -- Alerta de Fraude: Modificación de pagos
+    ADD (INSERT, UPDATE, DELETE ON operacion.Pagos BY [public]),  
+
+    -- Alerta de Seguridad: Borrado de clientes
+    ADD (DELETE ON operacion.Socios BY [public]),                  
+
+    -- Alerta de Privacidad: Recepción viendo datos personales
+    ADD (SELECT ON operacion.Socios BY [recepcion_gym])            
+
     WITH (STATE = ON);
 END
 GO
+
 
 PRINT 'Auditoría configurada exitosamente. ';
 GO
@@ -1639,3 +1653,119 @@ FROM
     ORDER BY 
     [Espacio Total (MB)] DESC;
 GO
+
+--ESTRATEGIA COMPLETA DE BACKUPS
+----------------------------------Backup completo
+
+/* ==========================================================
+   GENERACIÓN DE FECHAS Y RUTAS
+   ========================================================== */
+USE master;
+GO
+ALTER DATABASE OLYMPUS_GYM SET RECOVERY FULL;
+GO
+
+USE OLYMPUS_GYM;
+GO
+
+DECLARE @FechaBase VARCHAR(20), @FechaLogs VARCHAR(20), @RutaFull VARCHAR(300), @RutaDiff VARCHAR(300), @RutaLogs VARCHAR(300);
+
+-- Fecha base para Full y Diff (YYYYMMDDHHMMSS)
+SET @FechaBase = REPLACE(REPLACE(CONVERT(VARCHAR, GETDATE(), 120), ':', ''), '-', '');
+
+-- Fecha específica para logs (incluye milisegundos opcional)
+SET @FechaLogs = REPLACE(REPLACE(CONVERT(VARCHAR(23), GETDATE(), 121), ':', ''), '-', '');
+
+SET @RutaFull = 'C:\Backups\Full\Olympus_Full_' + @FechaBase + '.bak';
+SET @RutaDiff = 'C:\Backups\Diff\Olympus_Diff_' + @FechaBase + '.bak';
+SET @RutaLogs = 'C:\Backups\Logs\Olympus_Log_' + @FechaLogs + '.trn';
+
+
+
+/* ==========================================================
+   BACKUP FULL
+   ========================================================== */
+
+PRINT '=========================================';
+PRINT '*** INICIANDO BACKUP COMPLETO ***';
+PRINT 'Fecha: ' + CONVERT(VARCHAR, GETDATE(), 120);
+PRINT '=========================================';
+
+BACKUP DATABASE OLYMPUS_GYM
+TO DISK = @RutaFull
+WITH INIT, CHECKSUM, FORMAT, STATS = 10;
+
+PRINT 'Backup FULL creado: ' + @RutaFull;
+
+
+-- ================= VERIFICAR INTEGRIDAD ===================
+
+PRINT '-----------------------------------------';
+PRINT 'Verificando integridad del backup FULL...';
+PRINT '-----------------------------------------';
+
+RESTORE VERIFYONLY 
+FROM DISK = @RutaFull;
+
+PRINT '*** INTEGRIDAD DEL BACKUP FULL VERIFICADA ***';
+
+
+
+/* ==========================================================
+   BACKUP DIFFERENTIAL
+   ========================================================== */
+
+PRINT '=========================================';
+PRINT '*** INICIANDO BACKUP DIFFERENTIAL ***';
+PRINT 'Fecha: ' + CONVERT(VARCHAR, GETDATE(), 120);
+PRINT '=========================================';
+
+BACKUP DATABASE OLYMPUS_GYM
+TO DISK = @RutaDiff
+WITH DIFFERENTIAL, INIT, CHECKSUM, STATS = 10;
+
+PRINT 'Backup DIFFERENTIAL creado: ' + @RutaDiff;
+
+
+
+/* ==========================================================
+   BACKUP DE LOG DE TRANSACCIONES
+   ========================================================== */
+
+PRINT '=========================================';
+PRINT '*** INICIANDO BACKUP DEL LOG ***';
+PRINT 'Fecha: ' + CONVERT(VARCHAR, GETDATE(), 120);
+PRINT '=========================================';
+
+BACKUP LOG OLYMPUS_GYM
+TO DISK = @RutaLogs
+WITH INIT, CHECKSUM, STATS = 5;
+
+PRINT 'Backup LOG creado: ' + @RutaLogs;
+
+
+
+/* ==========================================================
+   FIN DEL PROCESO
+   ========================================================== */
+
+PRINT '=========================================';
+PRINT '*** TODOS LOS BACKUPS FINALIZARON EXITOSAMENTE ***';
+PRINT '=========================================';
+
+
+
+-- TAMAÑO_BASICO.sql
+-- =============================================
+-- MUESTRA TAMAÑO GENERAL DE LA BASE DE DATOS
+-- =============================================
+
+PRINT '=== INFORMACIÓN DE TAMAÑO - OLYMPUS GYM ===';
+
+SELECT 
+    name AS 'Base de Datos',
+    size/128.0 AS 'Tamaño Actual (MB)',
+    size/128.0 - CAST(FILEPROPERTY(name, 'SpaceUsed') AS int)/128.0 AS 'Espacio Libre (MB)',
+    CAST(FILEPROPERTY(name, 'SpaceUsed') AS int)/128.0 AS 'Espacio Usado (MB)',
+    (CAST(FILEPROPERTY(name, 'SpaceUsed') AS int)/128.0) / (size/128.0) * 100 AS 'Porcentaje Usado (%)'
+FROM sys.database_files;
