@@ -1418,6 +1418,38 @@ ON dbo.Reservas (id_socio, fecha_reserva);
 CREATE NONCLUSTERED INDEX IX_ClasesProg_Actividad_Fecha
 ON dbo.Clases_Programadas (actividad_id, fecha_hora_inicio);
 
+------------------CREACION DE ESQUEMAS-------------------------------------------
+USE OLYMPUS_GYM;
+GO
+
+CREATE SCHEMA catalogo;
+GO
+
+CREATE SCHEMA operacion;
+GO
+
+
+-- Esquema de catálogo (tablas más estáticas de configuración)
+ALTER SCHEMA catalogo TRANSFER dbo.Tipo_Membresia;
+ALTER SCHEMA catalogo TRANSFER dbo.Actividades;
+ALTER SCHEMA catalogo TRANSFER dbo.Entrenadores;
+
+-- Esquema de operación (tablas transaccionales)
+ALTER SCHEMA operacion TRANSFER dbo.Socios;
+ALTER SCHEMA operacion TRANSFER dbo.Clases_Programadas;
+ALTER SCHEMA operacion TRANSFER dbo.Pagos;
+ALTER SCHEMA operacion TRANSFER dbo.Reservas;
+
+--Comprobacion de los esquemas realizados 
+
+SELECT 
+    t.name       AS Tabla,
+    s.name       AS Esquema
+FROM sys.tables t
+JOIN sys.schemas s ON t.schema_id = s.schema_id
+ORDER BY s.name, t.name;
+
+
 
 --AUDITORÍA Y DIMENSIONAMIENTO
 
