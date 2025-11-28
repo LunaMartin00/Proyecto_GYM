@@ -1665,107 +1665,81 @@ GO
 ALTER DATABASE OLYMPUS_GYM SET RECOVERY FULL;
 GO
 
-USE OLYMPUS_GYM;
+USE [master];
 GO
 
-DECLARE @FechaBase VARCHAR(20), @FechaLogs VARCHAR(20), @RutaFull VARCHAR(300), @RutaDiff VARCHAR(300), @RutaLogs VARCHAR(300);
+DECLARE @RutaFull NVARCHAR(500);
+DECLARE @FullBackup NVARCHAR(500);
+DECLARE @FullArchivo NVARCHAR(256);
+DECLARE @FechaBase VARCHAR(20);
 
--- Fecha base para Full y Diff (YYYYMMDDHHMMSS)
-SET @FechaBase = REPLACE(REPLACE(CONVERT(VARCHAR, GETDATE(), 120), ':', ''), '-', '');
+-- Generar fecha/hora (YYYYMMDD_HHMMSS)
+SET @FechaBase = CONVERT(VARCHAR(20), GETDATE(), 112) + '_' + REPLACE(CONVERT(VARCHAR(20), GETDATE(), 108), ':', '');
 
--- Fecha específica para logs (incluye milisegundos opcional)
-SET @FechaLogs = REPLACE(REPLACE(CONVERT(VARCHAR(23), GETDATE(), 121), ':', ''), '-', '');
+-- Configuración de Archivo
+SET @FullArchivo = 'Olympus_Gym_FULL_' + @FechaBase + '.bak';
+SET @RutaFull = 'C:\Backups\Full\' + @FullArchivo;
+SET @FullBackup = 'Olympus Gym Full Backup';
 
-SET @RutaFull = 'C:\Backups\Full\Olympus_Full_' + @FechaBase + '.bak';
-SET @RutaDiff = 'C:\Backups\Diff\Olympus_Diff_' + @FechaBase + '.bak';
-SET @RutaLogs = 'C:\Backups\Logs\Olympus_Log_' + @FechaLogs + '.trn';
+PRINT 'Iniciando Backup Full en: ' + @RutaFull;
 
+BACKUP DATABASE [OLYMPUS_GYM] 
+TO DISK = @RutaFull 
+WITH 
+    INIT,        -- Sobrescribe/Inicializa el archivo (seguridad)
+    STATS = 10,  -- Muestra progreso cada 10%
+    NAME = @FullBackup;
+GO
 
+USE [master];
+GO
 
-/* ==========================================================
-   BACKUP FULL
-   ========================================================== */
+DECLARE @RutaDiff NVARCHAR(500);
+DECLARE @DiffBackup NVARCHAR(500);
+DECLARE @DiffArchivo NVARCHAR(256);
+DECLARE @FechaBase VARCHAR(20);
 
-PRINT '=========================================';
-PRINT '*** INICIANDO BACKUP COMPLETO ***';
-PRINT 'Fecha: ' + CONVERT(VARCHAR, GETDATE(), 120);
-PRINT '=========================================';
+-- Generar fecha/hora (YYYYMMDD_HHMMSS)
+SET @FechaBase = CONVERT(VARCHAR(20), GETDATE(), 112) + '_' + REPLACE(CONVERT(VARCHAR(20), GETDATE(), 108), ':', '');
 
-BACKUP DATABASE OLYMPUS_GYM
-TO DISK = @RutaFull
-WITH INIT, CHECKSUM, FORMAT, STATS = 10;
+-- Configuración de Archivo
+SET @DiffArchivo = 'Olympus_Gym_DIFF_' + @FechaBase + '.bak';
+SET @RutaDiff = 'C:\Backups\Diff\' + @DiffArchivo;
+SET @DiffBackup = 'Olympus Gym Diff Backup';
 
-PRINT 'Backup FULL creado: ' + @RutaFull;
+PRINT 'Iniciando Backup Diferencial en: ' + @RutaDiff;
 
+BACKUP DATABASE [OLYMPUS_GYM] 
+TO DISK = @RutaDiff 
+WITH 
+    DIFFERENTIAL, -- Solo guarda cambios desde el último Full
+    INIT,         -- Sobrescribe/Inicializa
+    STATS = 10,
+    NAME = @DiffBackup;
+GO
 
--- ================= VERIFICAR INTEGRIDAD ===================
+USE [master];
+GO
 
-PRINT '-----------------------------------------';
-PRINT 'Verificando integridad del backup FULL...';
-PRINT '-----------------------------------------';
+DECLARE @RutaLogs NVARCHAR(500);
+DECLARE @LogBackup NVARCHAR(500);
+DECLARE @LogArchivo NVARCHAR(256);
+DECLARE @FechaBase VARCHAR(20);
 
-RESTORE VERIFYONLY 
-FROM DISK = @RutaFull;
+-- Generar fecha/hora (YYYYMMDD_HHMMSS)
+SET @FechaBase = CONVERT(VARCHAR(20), GETDATE(), 112) + '_' + REPLACE(CONVERT(VARCHAR(20), GETDATE(), 108), ':', '');
 
-PRINT '*** INTEGRIDAD DEL BACKUP FULL VERIFICADA ***';
+-- Configuración de Archivo (Extensión .trn)
+SET @LogArchivo = 'Olympus_Gym_LOG_' + @FechaBase + '.trn';
+SET @RutaLogs = 'C:\Backups\Logs\' + @LogArchivo;
+SET @LogBackup = 'Olympus Gym Log Backup';
 
+PRINT 'Iniciando Backup de Log en: ' + @RutaLogs;
 
-
-/* ==========================================================
-   BACKUP DIFFERENTIAL
-   ========================================================== */
-
-PRINT '=========================================';
-PRINT '*** INICIANDO BACKUP DIFFERENTIAL ***';
-PRINT 'Fecha: ' + CONVERT(VARCHAR, GETDATE(), 120);
-PRINT '=========================================';
-
-BACKUP DATABASE OLYMPUS_GYM
-TO DISK = @RutaDiff
-WITH DIFFERENTIAL, INIT, CHECKSUM, STATS = 10;
-
-PRINT 'Backup DIFFERENTIAL creado: ' + @RutaDiff;
-
-
-
-/* ==========================================================
-   BACKUP DE LOG DE TRANSACCIONES
-   ========================================================== */
-
-PRINT '=========================================';
-PRINT '*** INICIANDO BACKUP DEL LOG ***';
-PRINT 'Fecha: ' + CONVERT(VARCHAR, GETDATE(), 120);
-PRINT '=========================================';
-
-BACKUP LOG OLYMPUS_GYM
-TO DISK = @RutaLogs
-WITH INIT, CHECKSUM, STATS = 5;
-
-PRINT 'Backup LOG creado: ' + @RutaLogs;
-
-
-
-/* ==========================================================
-   FIN DEL PROCESO
-   ========================================================== */
-
-PRINT '=========================================';
-PRINT '*** TODOS LOS BACKUPS FINALIZARON EXITOSAMENTE ***';
-PRINT '=========================================';
-
-
-
--- TAMAÑO_BASICO.sql
--- =============================================
--- MUESTRA TAMAÑO GENERAL DE LA BASE DE DATOS
--- =============================================
-
-PRINT '=== INFORMACIÓN DE TAMAÑO - OLYMPUS GYM ===';
-
-SELECT 
-    name AS 'Base de Datos',
-    size/128.0 AS 'Tamaño Actual (MB)',
-    size/128.0 - CAST(FILEPROPERTY(name, 'SpaceUsed') AS int)/128.0 AS 'Espacio Libre (MB)',
-    CAST(FILEPROPERTY(name, 'SpaceUsed') AS int)/128.0 AS 'Espacio Usado (MB)',
-    (CAST(FILEPROPERTY(name, 'SpaceUsed') AS int)/128.0) / (size/128.0) * 100 AS 'Porcentaje Usado (%)'
-FROM sys.database_files;
+BACKUP LOG [OLYMPUS_GYM] 
+TO DISK = @RutaLogs 
+WITH 
+    INIT,        -- Sobrescribe/Inicializa
+    STATS = 10,
+    NAME = @LogBackup;
+GO
